@@ -81,7 +81,50 @@ async function loadConditions() {
   const data = await res.json();
 
   statusEl.classList.remove("loading");
+  applyData(data);
 
+  if (!data.sources?.open_meteo?.ok) {
+    const fallback = await fetchOpenMeteoFallback(data.location.lat, data.location.lon);
+    if (fallback) {
+      data.current = fallback.current;
+      data.hourly = fallback.hourly;
+      data.sailability = getSailabilityClient(data.current);
+      data.sources = data.sources || {};
+      data.sources.open_meteo = { ok: true, url: fallback.url, note: "client fallback" };
+      applyData(data);
+    }
+  }
+}
+
+function renderHourly(hourly) {
+  hourlyGrid.innerHTML = "";
+  if (!hourly?.time) {
+    hourlyGrid.innerHTML = "<p>No hourly forecast available.</p>";
+    return;
+  }
+
+  const hours = hourly.time.slice(0, 12).map((time, index) => ({
+    time,
+    wind: hourly.windspeed_10m?.[index],
+    gust: hourly.windgusts_10m?.[index],
+    temp: hourly.temperature_2m?.[index]
+  }));
+
+  hourlyGrid.innerHTML = hours
+    .map(
+      (hour) => `
+        <div class="hour">
+          <p>${formatTimeLabel(hour.time)}</p>
+          <strong>${formatValue(hour.wind, " kt")}</strong>
+          <span>G ${formatValue(hour.gust, " kt")}</span>
+          <span>${formatValue(hour.temp, "°F")}</span>
+        </div>
+      `
+    )
+    .join("");
+}
+
+function applyData(data) {
   const sail = data.sailability ?? { status: "unknown", reason: "-" };
   statusEl.innerHTML = `
     <div>
@@ -128,32 +171,37 @@ async function loadConditions() {
   renderSources(data.sources);
 }
 
-function renderHourly(hourly) {
-  hourlyGrid.innerHTML = "";
-  if (!hourly?.time) {
-    hourlyGrid.innerHTML = "<p>No hourly forecast available.</p>";
-    return;
+async function fetchOpenMeteoFallback(lat, lon) {
+  if (typeof lat !== "number" || typeof lon !== "number") return null;
+  const url =
+    "https://api.open-meteo.com/v1/forecast" +
+    `?latitude=${lat}` +
+    `&longitude=${lon}` +
+    "&hourly=temperature_2m,windspeed_10m,winddirection_10m,windgusts_10m,weathercode" +
+    "&current_weather=true" +
+    "&windspeed_unit=kn" +
+    "&temperature_unit=fahrenheit" +
+    "&timezone=auto";
+  try {
+    const res = await fetch(url);
+    if (!res.ok) return null;
+    const forecast = await res.json();
+    const currentWeather = forecast.current_weather || {};
+    return {
+      url,
+      current: {
+        time: currentWeather.time,
+        temperature_f: currentWeather.temperature,
+        wind_speed_knots: currentWeather.windspeed,
+        wind_direction_deg: currentWeather.winddirection,
+        wind_gust_knots: currentWeather.windgusts ?? null,
+        weather_code: currentWeather.weathercode
+      },
+      hourly: forecast.hourly ?? null
+    };
+  } catch (err) {
+    return null;
   }
-
-  const hours = hourly.time.slice(0, 12).map((time, index) => ({
-    time,
-    wind: hourly.windspeed_10m?.[index],
-    gust: hourly.windgusts_10m?.[index],
-    temp: hourly.temperature_2m?.[index]
-  }));
-
-  hourlyGrid.innerHTML = hours
-    .map(
-      (hour) => `
-        <div class="hour">
-          <p>${formatTimeLabel(hour.time)}</p>
-          <strong>${formatValue(hour.wind, " kt")}</strong>
-          <span>G ${formatValue(hour.gust, " kt")}</span>
-          <span>${formatValue(hour.temp, "°F")}</span>
-        </div>
-      `
-    )
-    .join("");
 }
 
 function renderSources(sources) {
@@ -173,6 +221,21 @@ function renderSources(sources) {
       `;
     })
     .join("");
+}
+
+function getSailabilityClient(current) {
+  if (!current || typeof current.wind_speed_knots !== "number") {
+    return { status: "unknown", reason: "No wind data available." };
+  }
+  const speed = current.wind_speed_knots;
+  const gust = current.wind_gust_knots ?? speed;
+  if (speed >= 12 && speed <= 25 && gust <= 30) {
+    return { status: "go", reason: "Wind in the 12-25 kt range with manageable gusts." };
+  }
+  if ((speed >= 8 && speed < 12) || (speed > 25 && speed <= 30)) {
+    return { status: "marginal", reason: "Wind is close but not ideal." };
+  }
+  return { status: "no-go", reason: "Wind outside the usual sailing range." };
 }
 
 function initMap(spots) {
