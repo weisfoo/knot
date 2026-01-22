@@ -814,7 +814,10 @@ function buildWindIcon(speed, direction, stdDev) {
     className: "wind-icon",
     html: `
       <div class="wind-marker ${uncertainty}">
-        <div class="wind-arrow" style="transform: rotate(${rotation}deg)"></div>
+        <div class="wind-arrow" style="transform: rotate(${rotation}deg)">
+          <span class="arrow-shaft"></span>
+          <span class="arrow-head"></span>
+        </div>
         <div class="wind-speed">${label}</div>
       </div>
     `,
