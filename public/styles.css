@@ -234,6 +234,43 @@ select {
   border: 2px solid var(--ink);
 }
 
+.wind-icon {
+  background: transparent;
+  border: none;
+}
+
+.wind-marker {
+  width: 50px;
+  height: 50px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.92);
+  border: 2px solid var(--ink);
+  display: grid;
+  place-items: center;
+  position: relative;
+  box-shadow: 0 10px 20px var(--shadow);
+}
+
+.wind-marker.wind-uncertain {
+  border-style: dashed;
+}
+
+.wind-arrow {
+  width: 0;
+  height: 0;
+  border-left: 8px solid transparent;
+  border-right: 8px solid transparent;
+  border-bottom: 16px solid var(--accent);
+  position: absolute;
+  top: 6px;
+}
+
+.wind-speed {
+  font-weight: 700;
+  font-size: 0.9rem;
+  color: var(--ink);
+}
+
 .sources {
   margin-top: 32px;
   padding-top: 16px;
