@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Knot - Sailing Conditions</title>
+    <link rel="stylesheet" href="styles.css" />
+    <link
+      rel="stylesheet"
+      href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+      integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+      crossorigin=""
+    />
+  </head>
+  <body>
+    <main class="app">
+      <header class="hero">
+        <div>
+          <p class="tag">knot</p>
+          <h1>Know when to go. Know when to knot.</h1>
+          <p class="subtitle">One glance for wind, weather, tide, and swell.</p>
+        </div>
+        <div class="controls">
+          <label for="spot">Spot</label>
+          <select id="spot"></select>
+        </div>
+      </header>
+
+      <section class="status" id="status">
+        <div>
+          <h2>Loading conditions...</h2>
+          <p>Pulling the latest forecast.</p>
+        </div>
+      </section>
+
+      <section class="grid">
+        <article class="card" id="wind-card">
+          <h3>Wind</h3>
+          <div class="card-body"></div>
+        </article>
+        <article class="card" id="weather-card">
+          <h3>Weather</h3>
+          <div class="card-body"></div>
+        </article>
+        <article class="card" id="marine-card">
+          <h3>Marine</h3>
+          <div class="card-body"></div>
+        </article>
+        <article class="card" id="tide-card">
+          <h3>Tide</h3>
+          <div class="card-body"></div>
+        </article>
+      </section>
+
+      <section class="map-section">
+        <div class="map-header">
+          <h3>Bay Spots</h3>
+          <p>Click a marker to load conditions.</p>
+        </div>
+        <div id="map"></div>
+      </section>
+
+      <section class="hourly">
+        <h3>Next 12 Hours</h3>
+        <div class="hourly-grid" id="hourly-grid"></div>
+      </section>
+
+      <footer class="sources">
+        <h3>Data Sources</h3>
+        <div id="sources-grid"></div>
+      </footer>
+    </main>
+
+    <script
+      src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+      integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+      crossorigin=""
+    ></script>
+    <script src="config.js"></script>
+    <script type="module" src="app.js"></script>
+  </body>
+</html>
