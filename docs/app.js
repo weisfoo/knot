@@ -687,7 +687,8 @@ function tickFlow() {
 }
 
 function drawFlow() {
-  if (!flowLayer || !flowData || !map) return;
+  if (!flowLayer || !map) return;
+  if (!flowGrid?.points?.length && !flowData?.spots?.length) return;
   const { ctx, canvas } = flowLayer;
   const size = map.getSize();
   ctx.clearRect(0, 0, size.x, size.y);
