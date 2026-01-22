@@ -14,6 +14,8 @@ from fastapi.staticfiles import StaticFiles
 
 ROOT = Path(__file__).resolve().parent
 SPOTS_PATH = ROOT / "data" / "spots.json"
+WIND_THRESHOLD_KT = 5
+TIDE_THRESHOLD_FT = 1.5
 CACHE_TTL_SECONDS = 10 * 60
 MAP_CACHE_TTL_SECONDS = 10 * 60
 
@@ -78,18 +80,40 @@ def get_spot_by_id(spot_id: str) -> Optional[dict[str, Any]]:
     return next((spot for spot in spots if spot.get("id") == spot_id), None)
 
 
-def get_sailability(current: Optional[dict[str, Any]]) -> dict[str, str]:
+def get_sailability(
+    current: Optional[dict[str, Any]], tides: Optional[list[dict[str, Any]]]
+) -> dict[str, str]:
     if not current or not isinstance(current.get("wind_speed_knots"), (int, float)):
         return {"status": "unknown", "reason": "No wind data available."}
 
-    speed = current["wind_speed_knots"]
-    gust = current.get("wind_gust_knots", speed)
+    tide_value = None
+    if tides and isinstance(tides, list):
+        try:
+            tide_value = float(tides[0].get("v"))
+        except (TypeError, ValueError):
+            tide_value = None
 
-    if 12 <= speed <= 25 and gust <= 30:
-        return {"status": "go", "reason": "Wind in the 12-25 kt range with manageable gusts."}
-    if 8 <= speed < 12 or 25 < speed <= 30:
-        return {"status": "marginal", "reason": "Wind is close but not ideal."}
-    return {"status": "no-go", "reason": "Wind outside the usual sailing range."}
+    if tide_value is None:
+        return {"status": "unknown", "reason": "No tide data available."}
+
+    speed = current["wind_speed_knots"]
+
+    if speed >= WIND_THRESHOLD_KT and tide_value >= TIDE_THRESHOLD_FT:
+        return {
+            "status": "go",
+            "reason": f"Wind at least {WIND_THRESHOLD_KT} kt and tide above {TIDE_THRESHOLD_FT} ft.",
+        }
+
+    if speed < WIND_THRESHOLD_KT:
+        return {
+            "status": "no-go",
+            "reason": f"Wind below {WIND_THRESHOLD_KT} kt.",
+        }
+
+    return {
+        "status": "no-go",
+        "reason": f"Tide below {TIDE_THRESHOLD_FT} ft.",
+    }
 
 
 def slice_hourly(
@@ -270,6 +294,7 @@ async def api_conditions(
         "marine": None,
         "tides": None,
         "sailability": {"status": "unknown", "reason": "No wind data available."},
+        "thresholds": {"wind_knots": WIND_THRESHOLD_KT, "tide_ft": TIDE_THRESHOLD_FT},
     }
 
     try:
@@ -331,7 +356,7 @@ async def api_conditions(
         except Exception as exc:
             response["sources"]["noaa_tides"] = {"ok": False, "error": str(exc), "url": tide_url}
 
-    response["sailability"] = get_sailability(response.get("current"))
+    response["sailability"] = get_sailability(response.get("current"), response.get("tides"))
     wind_samples = []
     if response.get("current") and response["current"].get("wind_speed_knots") is not None:
         wind_samples.append(

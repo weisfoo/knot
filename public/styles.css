@@ -110,6 +110,7 @@ select {
   border: 2px solid var(--ink);
   padding: 12px;
   min-width: 200px;
+  max-width: 260px;
   box-shadow: 0 12px 25px var(--shadow);
   display: none;
   z-index: 10;
@@ -166,6 +167,12 @@ select {
 .status p {
   margin: 0;
   opacity: 0.85;
+}
+
+.thresholds {
+  font-size: 0.85rem;
+  opacity: 0.8;
+  margin-top: 8px;
 }
 
 .status-pill {
@@ -234,29 +241,10 @@ select {
   margin: 0 0 16px;
 }
 
-.hourly-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
-  gap: 12px;
-}
-
-.hour {
-  background: var(--bg-accent);
-  border-radius: 16px;
-  padding: 12px;
-  text-align: center;
-}
-
-.hour strong {
-  display: block;
-  font-size: 1.1rem;
-  margin: 4px 0;
-}
-
-.hour span {
-  display: block;
-  font-size: 0.8rem;
-  color: var(--muted);
+.chart-wrap {
+  position: relative;
+  width: 100%;
+  height: 280px;
 }
 
 .map-section {
@@ -308,17 +296,18 @@ select {
 .wind-arrow {
   width: 0;
   height: 0;
-  border-left: 8px solid transparent;
-  border-right: 8px solid transparent;
-  border-bottom: 16px solid var(--accent);
+  border-left: 6px solid transparent;
+  border-right: 6px solid transparent;
+  border-bottom: 12px solid var(--accent);
   position: absolute;
-  top: 6px;
+  top: 4px;
 }
 
 .wind-speed {
   font-weight: 700;
   font-size: 0.9rem;
   color: var(--ink);
+  margin-top: 10px;
 }
 
 .sources {
@@ -367,5 +356,15 @@ select {
 
   .status {
     padding: 24px;
+  }
+
+  .settings {
+    align-self: flex-end;
+  }
+
+  .settings-panel {
+    right: 0;
+    left: auto;
+    width: min(90vw, 260px);
   }
 }

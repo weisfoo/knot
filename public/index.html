@@ -87,8 +87,10 @@
       </section>
 
       <section class="hourly">
-        <h3>Next 12 Hours</h3>
-        <div class="hourly-grid" id="hourly-grid"></div>
+        <h3>Forecast (Next 24 Hours)</h3>
+        <div class="chart-wrap">
+          <canvas id="forecast-chart" aria-label="Forecast chart" role="img"></canvas>
+        </div>
       </section>
 
       <footer class="sources">
@@ -102,6 +104,7 @@
       integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
       crossorigin=""
     ></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
     <script src="config.js"></script>
     <script type="module" src="app.js"></script>
   </body>

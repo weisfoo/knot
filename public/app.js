@@ -4,7 +4,7 @@ const windCard = document.querySelector("#wind-card .card-body");
 const weatherCard = document.querySelector("#weather-card .card-body");
 const marineCard = document.querySelector("#marine-card .card-body");
 const tideCard = document.querySelector("#tide-card .card-body");
-const hourlyGrid = document.querySelector("#hourly-grid");
+const forecastChartEl = document.querySelector("#forecast-chart");
 const sourcesGrid = document.querySelector("#sources-grid");
 const mapEl = document.querySelector("#map");
 const windUnitLabel = document.querySelector("#wind-unit-label");
@@ -17,6 +17,7 @@ let map;
 let markers = {};
 let lastConditions = null;
 let lastMap = null;
+let forecastChart = null;
 
 const defaultSettings = {
   windUnit: "kt",
@@ -99,6 +100,41 @@ function formatWave(valueMeters) {
   return `${valueMeters.toFixed(1)} m`;
 }
 
+function weatherCodeText(code) {
+  const map = {
+    0: "Clear sky",
+    1: "Mainly clear",
+    2: "Partly cloudy",
+    3: "Overcast",
+    45: "Fog",
+    48: "Rime fog",
+    51: "Light drizzle",
+    53: "Drizzle",
+    55: "Heavy drizzle",
+    56: "Freezing drizzle",
+    57: "Heavy freezing drizzle",
+    61: "Light rain",
+    63: "Rain",
+    65: "Heavy rain",
+    66: "Freezing rain",
+    67: "Heavy freezing rain",
+    71: "Light snow",
+    73: "Snow",
+    75: "Heavy snow",
+    77: "Snow grains",
+    80: "Light showers",
+    81: "Showers",
+    82: "Heavy showers",
+    85: "Snow showers",
+    86: "Heavy snow showers",
+    95: "Thunderstorm",
+    96: "Thunderstorm w/ hail",
+    99: "Thunderstorm w/ heavy hail"
+  };
+  if (code === null || code === undefined || Number.isNaN(code)) return "-";
+  return map[code] ?? `Code ${code}`;
+}
+
 function setCardContent(el, rows) {
   el.innerHTML = rows.map((row) => `<p><span>${row.label}</span>${row.value}</p>`).join("");
 }
@@ -152,7 +188,7 @@ async function loadConditions() {
     if (fallback) {
       data.current = fallback.current;
       data.hourly = fallback.hourly;
-      data.sailability = getSailabilityClient(data.current);
+      data.sailability = getSailabilityClient(data.current, data.tides, data.thresholds);
       data.sources = data.sources || {};
       data.sources.open_meteo = { ok: true, url: fallback.url, note: "client fallback" };
       applyData(data);
@@ -160,41 +196,130 @@ async function loadConditions() {
   }
 }
 
-function renderHourly(hourly) {
-  hourlyGrid.innerHTML = "";
+function renderForecastChart(hourly) {
+  if (!forecastChartEl) return;
   if (!hourly?.time) {
-    hourlyGrid.innerHTML = "<p>No hourly forecast available.</p>";
+    if (forecastChart) {
+      forecastChart.destroy();
+      forecastChart = null;
+    }
     return;
   }
 
-  const hours = hourly.time.slice(0, 12).map((time, index) => ({
-    time,
-    wind: hourly.windspeed_10m?.[index],
-    gust: hourly.windgusts_10m?.[index],
-    temp: hourly.temperature_2m?.[index]
-  }));
+  const labels = hourly.time.slice(0, 24).map((time) => formatTimeLabel(time));
+  const wind = hourly.windspeed_10m?.slice(0, 24) ?? [];
+  const gust = hourly.windgusts_10m?.slice(0, 24) ?? [];
+  const temp = hourly.temperature_2m?.slice(0, 24) ?? [];
 
-  hourlyGrid.innerHTML = hours
-    .map(
-      (hour) => `
-        <div class="hour">
-          <p>${formatTimeLabel(hour.time)}</p>
-          <strong>${formatWind(hour.wind)}</strong>
-          <span>G ${formatWind(hour.gust)}</span>
-          <span>${formatTemp(hour.temp)}</span>
-        </div>
-      `
-    )
-    .join("");
+  const windData = wind.map((value) =>
+    value == null ? null : settings.windUnit === "mph" ? knotsToMph(value) : value
+  );
+  const gustData = gust.map((value) =>
+    value == null ? null : settings.windUnit === "mph" ? knotsToMph(value) : value
+  );
+  const tempData = temp.map((value) =>
+    value == null ? null : settings.tempUnit === "c" ? ((value - 32) * 5) / 9 : value
+  );
+
+  const windUnitLabelText = settings.windUnit === "mph" ? "mph" : "kt";
+  const tempUnitLabelText = settings.tempUnit === "c" ? "°C" : "°F";
+
+  const config = {
+    type: "line",
+    data: {
+      labels,
+      datasets: [
+        {
+          label: `Wind (${windUnitLabelText})`,
+          data: windData,
+          borderColor: "#0f6b6f",
+          backgroundColor: "rgba(15, 107, 111, 0.15)",
+          tension: 0.35,
+          fill: true,
+          pointRadius: 2
+        },
+        {
+          label: `Gust (${windUnitLabelText})`,
+          data: gustData,
+          borderColor: "#cc5b2d",
+          backgroundColor: "rgba(204, 91, 45, 0.12)",
+          tension: 0.35,
+          fill: false,
+          pointRadius: 2
+        },
+        {
+          label: `Temp (${tempUnitLabelText})`,
+          data: tempData,
+          borderColor: "#1d1c1a",
+          backgroundColor: "rgba(29, 28, 26, 0.08)",
+          tension: 0.35,
+          yAxisID: "yTemp",
+          fill: false,
+          pointRadius: 2
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: {
+          position: "bottom",
+          labels: {
+            usePointStyle: true,
+            boxWidth: 8
+          }
+        },
+        tooltip: {
+          intersect: false,
+          mode: "index"
+        }
+      },
+      scales: {
+        y: {
+          title: {
+            display: true,
+            text: `Wind (${windUnitLabelText})`
+          },
+          grid: {
+            color: "rgba(29, 28, 26, 0.08)"
+          }
+        },
+        yTemp: {
+          position: "right",
+          title: {
+            display: true,
+            text: `Temp (${tempUnitLabelText})`
+          },
+          grid: {
+            drawOnChartArea: false
+          }
+        },
+        x: {
+          grid: {
+            display: false
+          }
+        }
+      }
+    }
+  };
+
+  if (forecastChart) {
+    forecastChart.destroy();
+  }
+  forecastChart = new Chart(forecastChartEl, config);
 }
 
 function applyData(data) {
   const sail = data.sailability ?? { status: "unknown", reason: "-" };
+  const windThreshold = data.thresholds?.wind_knots ?? 5;
+  const tideThreshold = data.thresholds?.tide_ft ?? 1.5;
   statusEl.innerHTML = `
     <div>
       <p class="status-pill ${sail.status}">${sail.status}</p>
       <h2>${sail.reason}</h2>
       <p>Updated ${formatTimeLabel(data.updated_at)} for ${data.location.name ?? ""}</p>
+      <p class="thresholds">Thresholds: wind ≥ ${formatWind(windThreshold)} · tide ≥ ${tideThreshold} ft</p>
     </div>
   `;
 
@@ -208,7 +333,7 @@ function applyData(data) {
 
   setCardContent(weatherCard, [
     { label: "Temp", value: formatTemp(current.temperature_f) },
-    { label: "Weather code", value: formatValue(current.weather_code, "") },
+    { label: "Weather", value: weatherCodeText(current.weather_code) },
     { label: "Time", value: formatTimeLabel(current.time) }
   ]);
 
@@ -232,7 +357,7 @@ function applyData(data) {
     tideCard.innerHTML = "<p>Add a NOAA tide station for this spot.</p>";
   }
 
-  renderHourly(data.hourly);
+  renderForecastChart(data.hourly);
   renderSources(data.sources);
 }
 
@@ -292,19 +417,31 @@ function renderSources(sources) {
     .join("");
 }
 
-function getSailabilityClient(current) {
+function getSailabilityClient(current, tides, thresholds) {
   if (!current || typeof current.wind_speed_knots !== "number") {
     return { status: "unknown", reason: "No wind data available." };
   }
-  const speed = current.wind_speed_knots;
-  const gust = current.wind_gust_knots ?? speed;
-  if (speed >= 12 && speed <= 25 && gust <= 30) {
-    return { status: "go", reason: "Wind in the 12-25 kt range with manageable gusts." };
+
+  const windThreshold = thresholds?.wind_knots ?? 5;
+  const tideThreshold = thresholds?.tide_ft ?? 1.5;
+  const tideValue = Array.isArray(tides) && tides.length ? Number(tides[0].v) : null;
+
+  if (Number.isNaN(tideValue) || tideValue === null) {
+    return { status: "unknown", reason: "No tide data available." };
   }
-  if ((speed >= 8 && speed < 12) || (speed > 25 && speed <= 30)) {
-    return { status: "marginal", reason: "Wind is close but not ideal." };
+
+  if (current.wind_speed_knots >= windThreshold && tideValue >= tideThreshold) {
+    return {
+      status: "go",
+      reason: `Wind at least ${windThreshold} kt and tide above ${tideThreshold} ft.`
+    };
   }
-  return { status: "no-go", reason: "Wind outside the usual sailing range." };
+
+  if (current.wind_speed_knots < windThreshold) {
+    return { status: "no-go", reason: `Wind below ${windThreshold} kt.` };
+  }
+
+  return { status: "no-go", reason: `Tide below ${tideThreshold} ft.` };
 }
 
 function initMap(spots) {
@@ -334,11 +471,21 @@ async function loadMapWind() {
   const res = await fetch(apiUrl("/api/map"));
   const data = await res.json();
   lastMap = data;
+  applyMapData(data);
+}
+
+function applyMapData(data) {
   data.spots.forEach((spot) => {
     const marker = markers[spot.id];
     if (!marker) return;
     const wind = spot.wind;
-    marker.setIcon(buildWindIcon(wind?.mean_speed_knots ?? null, wind?.mean_direction_deg ?? null, wind?.std_dev_knots ?? null));
+    marker.setIcon(
+      buildWindIcon(
+        wind?.mean_speed_knots ?? null,
+        wind?.mean_direction_deg ?? null,
+        wind?.std_dev_knots ?? null
+      )
+    );
     const stdText =
       wind?.std_dev_knots != null
         ? settings.windUnit === "mph"
@@ -392,12 +539,7 @@ function refreshFromSettings() {
     applyData(lastConditions);
   }
   if (lastMap) {
-    lastMap.spots.forEach((spot) => {
-      const marker = markers[spot.id];
-      if (!marker) return;
-      const wind = spot.wind;
-      marker.setIcon(buildWindIcon(wind?.mean_speed_knots ?? null, wind?.mean_direction_deg ?? null, wind?.std_dev_knots ?? null));
-    });
+    applyMapData(lastMap);
   }
 }
 
