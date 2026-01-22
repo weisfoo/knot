@@ -20,6 +20,8 @@ let lastConditions = null;
 let lastMap = null;
 let forecastChart = null;
 let directionChart = null;
+let flowLayer = null;
+let flowData = null;
 
 const defaultSettings = {
   windUnit: "kt",
@@ -616,6 +618,8 @@ function initMap(spots) {
     attribution: "&copy; OpenStreetMap contributors"
   }).addTo(map);
 
+  initFlowLayer();
+
   markers = {};
   spots.forEach((spot) => {
     const marker = L.marker([spot.lat, spot.lon], {
@@ -636,7 +640,129 @@ async function loadMapWind() {
   const res = await fetch(apiUrl("/api/map"));
   const data = await res.json();
   lastMap = data;
+  flowData = data;
   applyMapData(data);
+}
+
+function initFlowLayer() {
+  if (!map) return;
+  const canvas = document.createElement("canvas");
+  canvas.className = "flow-canvas";
+  canvas.style.position = "absolute";
+  canvas.style.top = "0";
+  canvas.style.left = "0";
+  canvas.style.pointerEvents = "none";
+  map.getPanes().overlayPane.appendChild(canvas);
+  flowLayer = { canvas, ctx: canvas.getContext("2d"), phase: 0 };
+
+  const resize = () => {
+    const size = map.getSize();
+    canvas.width = size.x * window.devicePixelRatio;
+    canvas.height = size.y * window.devicePixelRatio;
+    canvas.style.width = `${size.x}px`;
+    canvas.style.height = `${size.y}px`;
+    flowLayer.ctx.setTransform(window.devicePixelRatio, 0, 0, window.devicePixelRatio, 0, 0);
+  };
+
+  resize();
+  map.on("resize zoom move", resize);
+  map.on("move zoom", () => drawFlow());
+  requestAnimationFrame(tickFlow);
+}
+
+function tickFlow() {
+  drawFlow();
+  requestAnimationFrame(tickFlow);
+}
+
+function drawFlow() {
+  if (!flowLayer || !flowData || !map) return;
+  const { ctx, canvas } = flowLayer;
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  const size = map.getSize();
+  const spacing = 80;
+  const now = Date.now();
+  const phase = (now / 1000) % 1;
+
+  for (let x = spacing / 2; x < size.x; x += spacing) {
+    for (let y = spacing / 2; y < size.y; y += spacing) {
+      const latlng = map.containerPointToLatLng([x, y]);
+      const wind = sampleWind(latlng);
+      if (!wind) continue;
+      drawFlowArrow(ctx, x, y, wind, phase);
+    }
+  }
+}
+
+function sampleWind(latlng) {
+  if (!flowData?.spots) return null;
+  const samples = flowData.spots
+    .map((spot) => {
+      if (!spot.wind || spot.wind.mean_speed_knots == null || spot.wind.mean_direction_deg == null) {
+        return null;
+      }
+      const dx = latlng.lat - spot.lat;
+      const dy = latlng.lng - spot.lon;
+      const dist2 = dx * dx + dy * dy;
+      const weight = dist2 === 0 ? 1 : 1 / dist2;
+      return {
+        weight,
+        speed: spot.wind.mean_speed_knots,
+        direction: spot.wind.mean_direction_deg
+      };
+    })
+    .filter(Boolean);
+
+  if (!samples.length) return null;
+  let weightSum = 0;
+  let speedSum = 0;
+  let sinSum = 0;
+  let cosSum = 0;
+  samples.forEach((sample) => {
+    weightSum += sample.weight;
+    speedSum += sample.speed * sample.weight;
+    const radians = (sample.direction * Math.PI) / 180;
+    sinSum += Math.sin(radians) * sample.weight;
+    cosSum += Math.cos(radians) * sample.weight;
+  });
+  const speed = speedSum / weightSum;
+  const direction = (Math.atan2(sinSum / weightSum, cosSum / weightSum) * 180) / Math.PI;
+  return {
+    speed,
+    direction: (direction + 360) % 360
+  };
+}
+
+function drawFlowArrow(ctx, x, y, wind, phase) {
+  const length = Math.min(18, 6 + wind.speed);
+  const angle = ((wind.direction - 90) * Math.PI) / 180;
+  const drift = (phase * 10) % 10;
+  const dx = Math.cos(angle) * drift;
+  const dy = Math.sin(angle) * drift;
+  const alpha = Math.min(0.6, 0.2 + wind.speed / 30);
+
+  ctx.save();
+  ctx.translate(x + dx, y + dy);
+  ctx.rotate(angle);
+  ctx.strokeStyle = `rgba(15, 107, 111, ${alpha})`;
+  ctx.lineWidth = 1.2;
+  ctx.beginPath();
+  ctx.moveTo(-length * 0.6, 0);
+  ctx.lineTo(length * 0.5, 0);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(length * 0.5, 0);
+  ctx.lineTo(length * 0.5 - 5, -4);
+  ctx.lineTo(length * 0.5 - 5, 4);
+  ctx.closePath();
+  ctx.fillStyle = `rgba(15, 107, 111, ${alpha})`;
+  ctx.fill();
+  ctx.beginPath();
+  ctx.fillStyle = `rgba(15, 107, 111, ${alpha * 0.7})`;
+  ctx.arc(-length * 0.6, 0, 2, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
 }
 
 function applyMapData(data) {
@@ -659,8 +785,10 @@ function applyMapData(data) {
         : "-";
     const speedLabel = wind?.mean_speed_knots != null ? formatWind(wind.mean_speed_knots) : "-";
     const srcCount = wind?.sources ? wind.sources.length : 0;
+    const dirValue = wind?.mean_direction_deg;
+    const dirLabel = dirValue != null ? `${dirValue}° (${cardinalFromDegrees(dirValue)})` : "-";
     marker.setPopupContent(
-      `<strong>${spot.name}</strong><br/>Wind: ${speedLabel}<br/>Dir: ${wind?.mean_direction_deg ?? "-"}°<br/>Std dev: ${stdText}<br/>Sources: ${srcCount}`
+      `<strong>${spot.name}</strong><br/>Wind: ${speedLabel}<br/>Dir: ${dirLabel}<br/>Std dev: ${stdText}<br/>Sources: ${srcCount}`
     );
   });
 }
