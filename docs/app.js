@@ -22,6 +22,9 @@ let forecastChart = null;
 let directionChart = null;
 let flowLayer = null;
 let flowData = null;
+let flowGrid = null;
+let flowGridController = null;
+let lastFlowFrame = 0;
 
 const defaultSettings = {
   windUnit: "kt",
@@ -619,6 +622,10 @@ function initMap(spots) {
   }).addTo(map);
 
   initFlowLayer();
+  queueGridFetch();
+  map.on("moveend zoomend", () => {
+    queueGridFetch();
+  });
 
   markers = {};
   spots.forEach((spot) => {
@@ -671,51 +678,53 @@ function initFlowLayer() {
 }
 
 function tickFlow() {
-  drawFlow();
+  const now = performance.now();
+  if (now - lastFlowFrame > 80) {
+    drawFlow();
+    lastFlowFrame = now;
+  }
   requestAnimationFrame(tickFlow);
 }
 
 function drawFlow() {
   if (!flowLayer || !flowData || !map) return;
   const { ctx, canvas } = flowLayer;
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-
   const size = map.getSize();
-  const spacing = 80;
-  const bounds = map.getBounds();
-  const latSpan = bounds.getNorth() - bounds.getSouth();
-  const lngSpan = bounds.getEast() - bounds.getWest();
-  const stepLat = (latSpan * spacing) / size.y;
-  const stepLng = (lngSpan * spacing) / size.x;
+  ctx.clearRect(0, 0, size.x, size.y);
+
+  const zoom = map.getZoom();
+  const spacing = Math.max(55, 110 - zoom * 4);
+  const pixelBounds = map.getPixelBounds();
   const now = Date.now();
   const phase = now / 900;
 
-  for (let lat = bounds.getSouth(); lat <= bounds.getNorth(); lat += stepLat) {
-    for (let lng = bounds.getWest(); lng <= bounds.getEast(); lng += stepLng) {
-      const latlng = { lat, lng };
-      const point = map.latLngToContainerPoint(latlng);
+  for (let x = pixelBounds.min.x; x <= pixelBounds.max.x; x += spacing) {
+    for (let y = pixelBounds.min.y; y <= pixelBounds.max.y; y += spacing) {
+      const latlng = map.unproject([x, y]);
+      const point = map.layerPointToContainerPoint([x, y]);
       const wind = sampleWind(latlng);
       if (!wind) continue;
-      drawFlowArrow(ctx, point.x, point.y, wind, phase, lat, lng);
+      drawFlowArrow(ctx, point.x, point.y, wind, phase, latlng.lat, latlng.lng);
     }
   }
 }
 
 function sampleWind(latlng) {
-  if (!flowData?.spots) return null;
-  const samples = flowData.spots
-    .map((spot) => {
-      if (!spot.wind || spot.wind.mean_speed_knots == null || spot.wind.mean_direction_deg == null) {
-        return null;
-      }
-      const dx = latlng.lat - spot.lat;
-      const dy = latlng.lng - spot.lon;
+  const source = flowGrid?.points?.length ? flowGrid.points : flowData?.spots;
+  if (!source) return null;
+  const samples = source
+    .map((point) => {
+      const speed = point.wind_speed_knots ?? point.wind?.mean_speed_knots;
+      const direction = point.wind_direction_deg ?? point.wind?.mean_direction_deg;
+      if (speed == null || direction == null) return null;
+      const dx = latlng.lat - point.lat;
+      const dy = latlng.lng - point.lon;
       const dist2 = dx * dx + dy * dy;
       const weight = dist2 === 0 ? 1 : 1 / dist2;
       return {
         weight,
-        speed: spot.wind.mean_speed_knots,
-        direction: spot.wind.mean_direction_deg
+        speed,
+        direction
       };
     })
     .filter(Boolean);
@@ -776,6 +785,79 @@ function drawFlowArrow(ctx, x, y, wind, phase, latSeed, lngSeed) {
   ctx.fillStyle = `rgba(15, 107, 111, ${alpha * 0.5})`;
   ctx.fill();
   ctx.restore();
+}
+
+function queueGridFetch() {
+  if (!map) return;
+  if (flowGridController) {
+    flowGridController.abort();
+  }
+  flowGridController = new AbortController();
+  const bounds = map.getBounds();
+  const bbox = [
+    bounds.getWest(),
+    bounds.getSouth(),
+    bounds.getEast(),
+    bounds.getNorth()
+  ].join(",");
+  fetchWindGrid(bbox, flowGridController.signal).catch(() => {
+    // ignore grid fetch errors
+  });
+}
+
+async function fetchWindGrid(bbox, signal) {
+  const url = apiUrl(`/api/wind-grid?bbox=${encodeURIComponent(bbox)}&rows=7&cols=9`);
+  const res = await fetch(url, { signal });
+  if (res.ok) {
+    const data = await res.json();
+    if (data?.points?.length) {
+      flowGrid = data;
+      return;
+    }
+  }
+  await fetchWindGridDirect(bbox, signal);
+}
+
+async function fetchWindGridDirect(bbox, signal) {
+  const parts = bbox.split(",").map(Number);
+  if (parts.length !== 4 || parts.some((num) => Number.isNaN(num))) return;
+  const [west, south, east, north] = parts;
+  const rows = 7;
+  const cols = 9;
+  const latitudes = [];
+  const longitudes = [];
+  for (let row = 0; row < rows; row += 1) {
+    const lat = south + (north - south) * (row / (rows - 1));
+    for (let col = 0; col < cols; col += 1) {
+      const lon = west + (east - west) * (col / (cols - 1));
+      latitudes.push(lat.toFixed(4));
+      longitudes.push(lon.toFixed(4));
+    }
+  }
+  const url =
+    "https://api.open-meteo.com/v1/forecast" +
+    `?latitude=${latitudes.join(",")}` +
+    `&longitude=${longitudes.join(",")}` +
+    "&current_weather=true" +
+    "&windspeed_unit=kn" +
+    "&timezone=auto";
+  const res = await fetch(url, { signal });
+  if (!res.ok) return;
+  const data = await res.json();
+  if (!Array.isArray(data)) return;
+  const points = data.map((entry) => ({
+    lat: entry.latitude,
+    lon: entry.longitude,
+    wind_speed_knots: entry.current_weather?.windspeed ?? null,
+    wind_direction_deg: entry.current_weather?.winddirection ?? null
+  }));
+  flowGrid = {
+    updated_at: new Date().toISOString(),
+    rows,
+    cols,
+    points,
+    source: { ok: true, url }
+  };
 }
 
 function applyMapData(data) {

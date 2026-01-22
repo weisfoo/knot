@@ -18,6 +18,7 @@ WIND_THRESHOLD_KT = 5
 TIDE_THRESHOLD_FT = 1.5
 CACHE_TTL_SECONDS = 10 * 60
 MAP_CACHE_TTL_SECONDS = 10 * 60
+GRID_CACHE_TTL_SECONDS = 5 * 60
 
 app = FastAPI(title="knot")
 app.add_middleware(
@@ -30,6 +31,7 @@ app.add_middleware(
 
 cache: dict[str, dict[str, Any]] = {}
 map_cache: dict[str, dict[str, Any]] = {}
+grid_cache: dict[str, dict[str, Any]] = {}
 
 
 def load_spots() -> list[dict[str, Any]]:
@@ -68,6 +70,20 @@ def get_map_cache(key: str) -> Optional[dict[str, Any]]:
         return None
     if time.time() > entry["expires_at"]:
         map_cache.pop(key, None)
+        return None
+    return entry["value"]
+
+
+def set_grid_cache(key: str, value: dict[str, Any]) -> None:
+    grid_cache[key] = {"value": value, "expires_at": time.time() + GRID_CACHE_TTL_SECONDS}
+
+
+def get_grid_cache(key: str) -> Optional[dict[str, Any]]:
+    entry = grid_cache.get(key)
+    if not entry:
+        return None
+    if time.time() > entry["expires_at"]:
+        grid_cache.pop(key, None)
         return None
     return entry["value"]
 
@@ -222,6 +238,21 @@ async def fetch_open_meteo_wind(latitude: float, longitude: float) -> dict[str, 
     )
     forecast = await fetch_json(forecast_url)
     return {"data": forecast, "url": forecast_url}
+
+
+async def fetch_open_meteo_grid(latitudes: list[float], longitudes: list[float]) -> dict[str, Any]:
+    lat_param = ",".join(f"{lat:.4f}" for lat in latitudes)
+    lon_param = ",".join(f"{lon:.4f}" for lon in longitudes)
+    grid_url = (
+        "https://api.open-meteo.com/v1/forecast"
+        f"?latitude={lat_param}"
+        f"&longitude={lon_param}"
+        "&current_weather=true"
+        "&windspeed_unit=kn"
+        "&timezone=auto"
+    )
+    data = await fetch_json(grid_url)
+    return {"data": data, "url": grid_url}
 
 
 async def fetch_nws_wind(latitude: float, longitude: float) -> dict[str, Any]:
@@ -437,6 +468,73 @@ async def api_map() -> JSONResponse:
     spots_payload = await asyncio.gather(*(build_spot(spot) for spot in spots))
     response = {"updated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), "spots": spots_payload}
     set_map_cache("map", response)
+    return JSONResponse(response)
+
+
+@app.get("/api/wind-grid")
+async def api_wind_grid(
+    bbox: str,
+    rows: int = Query(default=7, ge=3, le=12),
+    cols: int = Query(default=9, ge=3, le=12),
+) -> JSONResponse:
+    parts = bbox.split(",")
+    if len(parts) != 4:
+        raise HTTPException(status_code=400, detail="bbox must be west,south,east,north")
+    try:
+        west, south, east, north = [float(value) for value in parts]
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail="bbox must be numeric") from exc
+
+    cache_key = f"{west:.2f}:{south:.2f}:{east:.2f}:{north:.2f}:{rows}:{cols}"
+    cached = get_grid_cache(cache_key)
+    if cached:
+        return JSONResponse(cached)
+
+    latitudes = [
+        south + (north - south) * (row / (rows - 1)) for row in range(rows)
+    ]
+    longitudes = [
+        west + (east - west) * (col / (cols - 1)) for col in range(cols)
+    ]
+
+    points: list[dict[str, Any]] = []
+    lat_list: list[float] = []
+    lon_list: list[float] = []
+    for lat in latitudes:
+        for lon in longitudes:
+            lat_list.append(lat)
+            lon_list.append(lon)
+
+    try:
+        payload = await fetch_open_meteo_grid(lat_list, lon_list)
+        data = payload["data"]
+        for entry in data:
+            current = entry.get("current_weather") or {}
+            points.append(
+                {
+                    "lat": entry.get("latitude"),
+                    "lon": entry.get("longitude"),
+                    "wind_speed_knots": current.get("windspeed"),
+                    "wind_direction_deg": current.get("winddirection"),
+                }
+            )
+        response = {
+            "updated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+            "rows": rows,
+            "cols": cols,
+            "points": points,
+            "source": {"ok": True, "url": payload["url"]},
+        }
+    except Exception as exc:
+        response = {
+            "updated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+            "rows": rows,
+            "cols": cols,
+            "points": [],
+            "source": {"ok": False, "error": str(exc)},
+        }
+
+    set_grid_cache(cache_key, response)
     return JSONResponse(response)
 
 
