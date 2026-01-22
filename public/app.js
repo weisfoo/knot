@@ -801,9 +801,16 @@ function queueGridFetch() {
     bounds.getEast(),
     bounds.getNorth()
   ].join(",");
-  fetchWindGrid(bbox, flowGridController.signal).catch(() => {
-    // ignore grid fetch errors
-  });
+  fetchWindGridDirect(bbox, flowGridController.signal)
+    .then((success) => {
+      if (!success) {
+        return fetchWindGrid(bbox, flowGridController.signal);
+      }
+      return null;
+    })
+    .catch(() => {
+      // ignore grid fetch errors
+    });
 }
 
 async function fetchWindGrid(bbox, signal) {
@@ -816,7 +823,7 @@ async function fetchWindGrid(bbox, signal) {
       return;
     }
   }
-  await fetchWindGridDirect(bbox, signal);
+  return false;
 }
 
 async function fetchWindGridDirect(bbox, signal) {
@@ -843,9 +850,9 @@ async function fetchWindGridDirect(bbox, signal) {
     "&windspeed_unit=kn" +
     "&timezone=auto";
   const res = await fetch(url, { signal });
-  if (!res.ok) return;
+  if (!res.ok) return false;
   const data = await res.json();
-  if (!Array.isArray(data)) return;
+  if (!Array.isArray(data)) return false;
   const points = data.map((entry) => ({
     lat: entry.latitude,
     lon: entry.longitude,
@@ -859,6 +866,7 @@ async function fetchWindGridDirect(bbox, signal) {
     points,
     source: { ok: true, url }
   };
+  return true;
 }
 
 function applyMapData(data) {
