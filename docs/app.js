@@ -137,6 +137,13 @@ function weatherCodeText(code) {
   return map[code] ?? `Code ${code}`;
 }
 
+function cardinalFromDegrees(deg) {
+  if (deg === null || deg === undefined || Number.isNaN(deg)) return "-";
+  const index = Math.round(deg / 45) % 8;
+  const labels = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"];
+  return labels[index];
+}
+
 function setCardContent(el, rows) {
   el.innerHTML = rows.map((row) => `<p><span>${row.label}</span>${row.value}</p>`).join("");
 }
@@ -420,6 +427,17 @@ function renderDirectionChart(hourly) {
             usePointStyle: true,
             boxWidth: 8
           }
+        },
+        tooltip: {
+          callbacks: {
+            label(context) {
+              const value = context.parsed.y;
+              if (value === null || value === undefined || Number.isNaN(value)) {
+                return "Direction: -";
+              }
+              return `Direction: ${Math.round(value)}° (${cardinalFromDegrees(value)})`;
+            }
+          }
         }
       },
       scales: {
@@ -427,7 +445,10 @@ function renderDirectionChart(hourly) {
           min: 0,
           max: 360,
           ticks: {
-            stepSize: 90
+            stepSize: 90,
+            callback(value) {
+              return `${value}° ${cardinalFromDegrees(Number(value))}`;
+            }
           },
           title: {
             display: true,
