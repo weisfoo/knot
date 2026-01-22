@@ -178,6 +178,16 @@ select {
   opacity: 0.85;
 }
 
+.status.compact {
+  padding: 18px 22px;
+  margin-top: 16px;
+  margin-bottom: 32px;
+}
+
+.status.compact h2 {
+  font-size: 1.2rem;
+}
+
 .thresholds {
   font-size: 0.85rem;
   opacity: 0.8;
@@ -285,6 +295,10 @@ select {
   border: 2px solid var(--ink);
 }
 
+.flow-canvas {
+  mix-blend-mode: multiply;
+}
+
 .wind-icon {
   background: transparent;
   border: none;
@@ -336,6 +350,15 @@ select {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
   gap: 12px;
+}
+
+.dedication {
+  margin-top: 28px;
+  font-size: 0.75rem;
+  letter-spacing: 0.12em;
+  text-transform: lowercase;
+  color: var(--muted);
+  text-align: center;
 }
 
 .source-pill {

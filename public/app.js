@@ -682,15 +682,21 @@ function drawFlow() {
 
   const size = map.getSize();
   const spacing = 80;
+  const bounds = map.getBounds();
+  const latSpan = bounds.getNorth() - bounds.getSouth();
+  const lngSpan = bounds.getEast() - bounds.getWest();
+  const stepLat = (latSpan * spacing) / size.y;
+  const stepLng = (lngSpan * spacing) / size.x;
   const now = Date.now();
-  const phase = (now / 1000) % 1;
+  const phase = now / 900;
 
-  for (let x = spacing / 2; x < size.x; x += spacing) {
-    for (let y = spacing / 2; y < size.y; y += spacing) {
-      const latlng = map.containerPointToLatLng([x, y]);
+  for (let lat = bounds.getSouth(); lat <= bounds.getNorth(); lat += stepLat) {
+    for (let lng = bounds.getWest(); lng <= bounds.getEast(); lng += stepLng) {
+      const latlng = { lat, lng };
+      const point = map.latLngToContainerPoint(latlng);
       const wind = sampleWind(latlng);
       if (!wind) continue;
-      drawFlowArrow(ctx, x, y, wind, phase);
+      drawFlowArrow(ctx, point.x, point.y, wind, phase, lat, lng);
     }
   }
 }
@@ -734,10 +740,10 @@ function sampleWind(latlng) {
   };
 }
 
-function drawFlowArrow(ctx, x, y, wind, phase) {
+function drawFlowArrow(ctx, x, y, wind, phase, latSeed, lngSeed) {
   const length = Math.min(18, 6 + wind.speed);
   const angle = ((wind.direction - 90) * Math.PI) / 180;
-  const drift = (phase * 10) % 10;
+  const drift = Math.sin(phase + latSeed + lngSeed) * 4;
   const dx = Math.cos(angle) * drift;
   const dy = Math.sin(angle) * drift;
   const alpha = Math.min(0.6, 0.2 + wind.speed / 30);
@@ -756,11 +762,18 @@ function drawFlowArrow(ctx, x, y, wind, phase) {
   ctx.lineTo(length * 0.5 - 5, -4);
   ctx.lineTo(length * 0.5 - 5, 4);
   ctx.closePath();
-  ctx.fillStyle = `rgba(15, 107, 111, ${alpha})`;
+  ctx.fillStyle = `rgba(10, 80, 84, ${alpha})`;
   ctx.fill();
   ctx.beginPath();
-  ctx.fillStyle = `rgba(15, 107, 111, ${alpha * 0.7})`;
+  ctx.fillStyle = `rgba(15, 107, 111, ${alpha * 0.4})`;
   ctx.arc(-length * 0.6, 0, 2, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.moveTo(-length * 0.35, -3);
+  ctx.lineTo(-length * 0.35 - 4, 0);
+  ctx.lineTo(-length * 0.35, 3);
+  ctx.closePath();
+  ctx.fillStyle = `rgba(15, 107, 111, ${alpha * 0.5})`;
   ctx.fill();
   ctx.restore();
 }

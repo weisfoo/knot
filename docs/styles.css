@@ -353,11 +353,12 @@ select {
 }
 
 .dedication {
-  margin-top: 14px;
+  margin-top: 28px;
   font-size: 0.75rem;
   letter-spacing: 0.12em;
-  text-transform: uppercase;
+  text-transform: lowercase;
   color: var(--muted);
+  text-align: center;
 }
 
 .source-pill {
