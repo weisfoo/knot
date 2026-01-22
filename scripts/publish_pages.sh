@@ -11,4 +11,8 @@ if [ ! -f "${ROOT_DIR}/docs/.nojekyll" ]; then
   touch "${ROOT_DIR}/docs/.nojekyll"
 fi
 
+if [ -f "${ROOT_DIR}/public/CNAME" ]; then
+  cp "${ROOT_DIR}/public/CNAME" "${ROOT_DIR}/docs/CNAME"
+fi
+
 echo "Copied public/ -> docs/ for GitHub Pages."
