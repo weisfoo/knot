@@ -1,0 +1,79 @@
+[
+  {
+    "id": "crissy",
+    "name": "Crissy Field",
+    "lat": 37.8041,
+    "lon": -122.4677,
+    "noaa_tide_station": "9414290"
+  },
+  {
+    "id": "alameda",
+    "name": "Alameda",
+    "lat": 37.7833,
+    "lon": -122.2833,
+    "noaa_tide_station": "9414750"
+  },
+  {
+    "id": "berkeley",
+    "name": "Berkeley Marina",
+    "lat": 37.8697,
+    "lon": -122.3151,
+    "noaa_tide_station": "9414816"
+  },
+  {
+    "id": "treasure-island",
+    "name": "Treasure Island",
+    "lat": 37.8246,
+    "lon": -122.3703,
+    "noaa_tide_station": "9414290"
+  },
+  {
+    "id": "coyote-point",
+    "name": "Coyote Point",
+    "lat": 37.5891,
+    "lon": -122.3187,
+    "noaa_tide_station": "9413450"
+  },
+  {
+    "id": "3rd-ave",
+    "name": "3rd Ave",
+    "lat": 37.5651,
+    "lon": -122.3165,
+    "noaa_tide_station": "9413450"
+  },
+  {
+    "id": "crown-beach",
+    "name": "Crown Beach",
+    "lat": 37.7649,
+    "lon": -122.2559,
+    "noaa_tide_station": "9414750"
+  },
+  {
+    "id": "richmond",
+    "name": "Richmond Marina",
+    "lat": 37.9192,
+    "lon": -122.3914,
+    "noaa_tide_station": "9414863"
+  },
+  {
+    "id": "point-isabel",
+    "name": "Point Isabel",
+    "lat": 37.8922,
+    "lon": -122.3178,
+    "noaa_tide_station": "9414863"
+  },
+  {
+    "id": "encinal",
+    "name": "Encinal Beach",
+    "lat": 37.7734,
+    "lon": -122.2715,
+    "noaa_tide_station": "9414750"
+  },
+  {
+    "id": "larkspur",
+    "name": "Larkspur",
+    "lat": 37.9447,
+    "lon": -122.5039,
+    "noaa_tide_station": "9415020"
+  }
+]
