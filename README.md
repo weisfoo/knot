@@ -56,3 +56,4 @@ Edit `data/spots.json` to add your favorite sailing spots. Add a NOAA tide stati
 Notes:
 - Some data providers require a key or paid plan for higher usage.
 - Marine model parameters vary by region; update `main.py` if you want different fields.
+# knot
