@@ -7,8 +7,23 @@ const tideCard = document.querySelector("#tide-card .card-body");
 const hourlyGrid = document.querySelector("#hourly-grid");
 const sourcesGrid = document.querySelector("#sources-grid");
 const mapEl = document.querySelector("#map");
+const windUnitLabel = document.querySelector("#wind-unit-label");
+const settingsToggle = document.querySelector("#settings-toggle");
+const settingsPanel = document.querySelector("#settings-panel");
+const windUnitSelect = document.querySelector("#wind-unit");
+const tempUnitSelect = document.querySelector("#temp-unit");
+const waveUnitSelect = document.querySelector("#wave-unit");
 let map;
 let markers = {};
+let lastConditions = null;
+let lastMap = null;
+
+const defaultSettings = {
+  windUnit: "kt",
+  tempUnit: "f",
+  waveUnit: "m"
+};
+let settings = loadSettings();
 
 const cardinal = [
   "N",
@@ -37,6 +52,51 @@ function degToCardinal(deg) {
 function formatValue(value, suffix) {
   if (value === null || value === undefined || Number.isNaN(value)) return "-";
   return `${value}${suffix}`;
+}
+
+function loadSettings() {
+  try {
+    const stored = JSON.parse(localStorage.getItem("knot_settings"));
+    return { ...defaultSettings, ...stored };
+  } catch (err) {
+    return { ...defaultSettings };
+  }
+}
+
+function saveSettings() {
+  localStorage.setItem("knot_settings", JSON.stringify(settings));
+}
+
+function knotsToMph(knots) {
+  return knots * 1.15078;
+}
+
+function metersToFeet(meters) {
+  return meters * 3.28084;
+}
+
+function formatWind(valueKnots) {
+  if (valueKnots === null || valueKnots === undefined || Number.isNaN(valueKnots)) return "-";
+  if (settings.windUnit === "mph") {
+    return `${Math.round(knotsToMph(valueKnots))} mph`;
+  }
+  return `${Math.round(valueKnots)} kt`;
+}
+
+function formatTemp(valueF) {
+  if (valueF === null || valueF === undefined || Number.isNaN(valueF)) return "-";
+  if (settings.tempUnit === "c") {
+    return `${Math.round(((valueF - 32) * 5) / 9)}°C`;
+  }
+  return `${Math.round(valueF)}°F`;
+}
+
+function formatWave(valueMeters) {
+  if (valueMeters === null || valueMeters === undefined || Number.isNaN(valueMeters)) return "-";
+  if (settings.waveUnit === "ft") {
+    return `${metersToFeet(valueMeters).toFixed(1)} ft`;
+  }
+  return `${valueMeters.toFixed(1)} m`;
 }
 
 function setCardContent(el, rows) {
@@ -84,6 +144,7 @@ async function loadConditions() {
   const data = await res.json();
 
   statusEl.classList.remove("loading");
+  lastConditions = data;
   applyData(data);
 
   if (!data.sources?.open_meteo?.ok) {
@@ -118,9 +179,9 @@ function renderHourly(hourly) {
       (hour) => `
         <div class="hour">
           <p>${formatTimeLabel(hour.time)}</p>
-          <strong>${formatValue(hour.wind, " kt")}</strong>
-          <span>G ${formatValue(hour.gust, " kt")}</span>
-          <span>${formatValue(hour.temp, "°F")}</span>
+          <strong>${formatWind(hour.wind)}</strong>
+          <span>G ${formatWind(hour.gust)}</span>
+          <span>${formatTemp(hour.temp)}</span>
         </div>
       `
     )
@@ -140,20 +201,20 @@ function applyData(data) {
   const current = data.current ?? {};
   const gustLabel = current.wind_gust_source === "hourly" ? "Gust (hourly)" : "Gust";
   setCardContent(windCard, [
-    { label: "Speed", value: formatValue(current.wind_speed_knots, " kt") },
-    { label: gustLabel, value: formatValue(current.wind_gust_knots, " kt") },
+    { label: "Speed", value: formatWind(current.wind_speed_knots) },
+    { label: gustLabel, value: formatWind(current.wind_gust_knots) },
     { label: "Direction", value: `${formatValue(current.wind_direction_deg, "°")} ${degToCardinal(current.wind_direction_deg)}` }
   ]);
 
   setCardContent(weatherCard, [
-    { label: "Temp", value: formatValue(current.temperature_f, "°F") },
+    { label: "Temp", value: formatTemp(current.temperature_f) },
     { label: "Weather code", value: formatValue(current.weather_code, "") },
     { label: "Time", value: formatTimeLabel(current.time) }
   ]);
 
   if (data.marine?.time) {
     setCardContent(marineCard, [
-      { label: "Wave height", value: formatValue(data.marine.wave_height?.[0], " m") },
+      { label: "Wave height", value: formatWave(data.marine.wave_height?.[0]) },
       { label: "Wave period", value: formatValue(data.marine.wave_period?.[0], " s") },
       { label: "Wave direction", value: `${formatValue(data.marine.wave_direction?.[0], "°")} ${degToCardinal(data.marine.wave_direction?.[0])}` }
     ]);
@@ -272,21 +333,28 @@ function initMap(spots) {
 async function loadMapWind() {
   const res = await fetch(apiUrl("/api/map"));
   const data = await res.json();
+  lastMap = data;
   data.spots.forEach((spot) => {
     const marker = markers[spot.id];
     if (!marker) return;
     const wind = spot.wind;
     marker.setIcon(buildWindIcon(wind?.mean_speed_knots ?? null, wind?.mean_direction_deg ?? null, wind?.std_dev_knots ?? null));
-    const stdText = wind?.std_dev_knots != null ? `±${wind.std_dev_knots} kt` : "-";
+    const stdText =
+      wind?.std_dev_knots != null
+        ? settings.windUnit === "mph"
+          ? `±${Math.round(knotsToMph(wind.std_dev_knots))} mph`
+          : `±${wind.std_dev_knots} kt`
+        : "-";
+    const speedLabel = wind?.mean_speed_knots != null ? formatWind(wind.mean_speed_knots) : "-";
     const srcCount = wind?.sources ? wind.sources.length : 0;
     marker.setPopupContent(
-      `<strong>${spot.name}</strong><br/>Wind: ${wind?.mean_speed_knots ?? "-"} kt<br/>Dir: ${wind?.mean_direction_deg ?? "-"}°<br/>Std dev: ${stdText}<br/>Sources: ${srcCount}`
+      `<strong>${spot.name}</strong><br/>Wind: ${speedLabel}<br/>Dir: ${wind?.mean_direction_deg ?? "-"}°<br/>Std dev: ${stdText}<br/>Sources: ${srcCount}`
     );
   });
 }
 
 function buildWindIcon(speed, direction, stdDev) {
-  const label = speed == null ? "--" : Math.round(speed);
+  const label = speed == null ? "--" : Math.round(settings.windUnit === "mph" ? knotsToMph(speed) : speed);
   const rotation = direction == null ? 0 : direction;
   const uncertainty = stdDev != null && stdDev > 2 ? "wind-uncertain" : "";
   return L.divIcon({
@@ -309,6 +377,49 @@ setInterval(() => {
     });
   }
 }, 10 * 60 * 1000);
+
+function applySettingsToUI() {
+  windUnitSelect.value = settings.windUnit;
+  tempUnitSelect.value = settings.tempUnit;
+  waveUnitSelect.value = settings.waveUnit;
+  if (windUnitLabel) {
+    windUnitLabel.textContent = `Wind in ${settings.windUnit === "mph" ? "mph" : "kt"}`;
+  }
+}
+
+function refreshFromSettings() {
+  if (lastConditions) {
+    applyData(lastConditions);
+  }
+  if (lastMap) {
+    lastMap.spots.forEach((spot) => {
+      const marker = markers[spot.id];
+      if (!marker) return;
+      const wind = spot.wind;
+      marker.setIcon(buildWindIcon(wind?.mean_speed_knots ?? null, wind?.mean_direction_deg ?? null, wind?.std_dev_knots ?? null));
+    });
+  }
+}
+
+settingsToggle.addEventListener("click", () => {
+  const isOpen = settingsPanel.classList.toggle("open");
+  settingsPanel.setAttribute("aria-hidden", String(!isOpen));
+});
+
+[windUnitSelect, tempUnitSelect, waveUnitSelect].forEach((select) => {
+  select.addEventListener("change", () => {
+    settings = {
+      windUnit: windUnitSelect.value,
+      tempUnit: tempUnitSelect.value,
+      waveUnit: waveUnitSelect.value
+    };
+    saveSettings();
+    applySettingsToUI();
+    refreshFromSettings();
+  });
+});
+
+applySettingsToUI();
 
 spotSelect.addEventListener("change", () => {
   loadConditions().catch(() => {

@@ -87,6 +87,56 @@ select {
   font-weight: 600;
 }
 
+.settings {
+  position: relative;
+  min-width: 160px;
+}
+
+.settings-toggle {
+  padding: 10px 14px;
+  border-radius: 999px;
+  border: 2px solid var(--ink);
+  background: #fff;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.settings-panel {
+  position: absolute;
+  right: 0;
+  top: 44px;
+  background: #fff;
+  border-radius: 16px;
+  border: 2px solid var(--ink);
+  padding: 12px;
+  min-width: 200px;
+  box-shadow: 0 12px 25px var(--shadow);
+  display: none;
+  z-index: 10;
+}
+
+.settings-panel.open {
+  display: grid;
+  gap: 10px;
+}
+
+.settings-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+.settings-row label {
+  font-size: 0.7rem;
+}
+
+.settings-row select {
+  border-radius: 10px;
+  padding: 6px 10px;
+  font-size: 0.85rem;
+}
+
 .status {
   background: linear-gradient(135deg, #0f6b6f 0%, #1e8a76 60%, #4a9c69 100%);
   color: #fff;
