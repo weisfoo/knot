@@ -215,6 +215,7 @@ async def fetch_open_meteo_wind(latitude: float, longitude: float) -> dict[str, 
         f"&longitude={longitude}"
         "&hourly=temperature_2m,windspeed_10m,winddirection_10m,windgusts_10m,weathercode"
         "&current_weather=true"
+        "&past_days=1"
         "&windspeed_unit=kn"
         "&temperature_unit=fahrenheit"
         "&timezone=auto"

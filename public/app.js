@@ -13,11 +13,13 @@ const settingsPanel = document.querySelector("#settings-panel");
 const windUnitSelect = document.querySelector("#wind-unit");
 const tempUnitSelect = document.querySelector("#temp-unit");
 const waveUnitSelect = document.querySelector("#wave-unit");
+const directionChartEl = document.querySelector("#direction-chart");
 let map;
 let markers = {};
 let lastConditions = null;
 let lastMap = null;
 let forecastChart = null;
+let directionChart = null;
 
 const defaultSettings = {
   windUnit: "kt",
@@ -196,6 +198,27 @@ async function loadConditions() {
   }
 }
 
+function selectHourlyWindow(hourly, anchorTime, windowSize = 24) {
+  if (!hourly?.time) return { start: 0, end: windowSize };
+  const times = hourly.time.map((time) => new Date(time).getTime());
+  let anchor = Date.now();
+  if (anchorTime) {
+    const parsed = new Date(anchorTime).getTime();
+    if (!Number.isNaN(parsed)) {
+      anchor = parsed;
+    }
+  }
+  let anchorIndex = times.findIndex((time) => time >= anchor);
+  if (anchorIndex === -1) anchorIndex = Math.max(0, times.length - 1);
+  const half = Math.floor(windowSize / 2);
+  let start = Math.max(0, anchorIndex - half);
+  let end = Math.min(times.length, start + windowSize);
+  if (end - start < windowSize) {
+    start = Math.max(0, end - windowSize);
+  }
+  return { start, end };
+}
+
 function renderForecastChart(hourly) {
   if (!forecastChartEl) return;
   if (!hourly?.time) {
@@ -206,10 +229,11 @@ function renderForecastChart(hourly) {
     return;
   }
 
-  const labels = hourly.time.slice(0, 24).map((time) => formatTimeLabel(time));
-  const wind = hourly.windspeed_10m?.slice(0, 24) ?? [];
-  const gust = hourly.windgusts_10m?.slice(0, 24) ?? [];
-  const temp = hourly.temperature_2m?.slice(0, 24) ?? [];
+  const window = selectHourlyWindow(hourly, lastConditions?.current?.time, 24);
+  const labels = hourly.time.slice(window.start, window.end).map((time) => formatTimeLabel(time));
+  const wind = hourly.windspeed_10m?.slice(window.start, window.end) ?? [];
+  const gust = hourly.windgusts_10m?.slice(window.start, window.end) ?? [];
+  const temp = hourly.temperature_2m?.slice(window.start, window.end) ?? [];
 
   const windData = wind.map((value) =>
     value == null ? null : settings.windUnit === "mph" ? knotsToMph(value) : value
@@ -310,6 +334,78 @@ function renderForecastChart(hourly) {
   forecastChart = new Chart(forecastChartEl, config);
 }
 
+function renderDirectionChart(hourly) {
+  if (!directionChartEl) return;
+  if (!hourly?.time) {
+    if (directionChart) {
+      directionChart.destroy();
+      directionChart = null;
+    }
+    return;
+  }
+
+  const window = selectHourlyWindow(hourly, lastConditions?.current?.time, 24);
+  const labels = hourly.time.slice(window.start, window.end).map((time) => formatTimeLabel(time));
+  const direction = hourly.winddirection_10m?.slice(window.start, window.end) ?? [];
+
+  const config = {
+    type: "line",
+    data: {
+      labels,
+      datasets: [
+        {
+          label: "Direction (°)",
+          data: direction,
+          borderColor: "#1d1c1a",
+          backgroundColor: "rgba(29, 28, 26, 0.08)",
+          tension: 0.2,
+          fill: false,
+          pointRadius: 2
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: {
+          position: "bottom",
+          labels: {
+            usePointStyle: true,
+            boxWidth: 8
+          }
+        }
+      },
+      scales: {
+        y: {
+          min: 0,
+          max: 360,
+          ticks: {
+            stepSize: 90
+          },
+          title: {
+            display: true,
+            text: "Direction (degrees)"
+          },
+          grid: {
+            color: "rgba(29, 28, 26, 0.08)"
+          }
+        },
+        x: {
+          grid: {
+            display: false
+          }
+        }
+      }
+    }
+  };
+
+  if (directionChart) {
+    directionChart.destroy();
+  }
+  directionChart = new Chart(directionChartEl, config);
+}
+
 function applyData(data) {
   const sail = data.sailability ?? { status: "unknown", reason: "-" };
   const windThreshold = data.thresholds?.wind_knots ?? 5;
@@ -358,6 +454,7 @@ function applyData(data) {
   }
 
   renderForecastChart(data.hourly);
+  renderDirectionChart(data.hourly);
   renderSources(data.sources);
 }
 
@@ -369,6 +466,7 @@ async function fetchOpenMeteoFallback(lat, lon) {
     `&longitude=${lon}` +
     "&hourly=temperature_2m,windspeed_10m,winddirection_10m,windgusts_10m,weathercode" +
     "&current_weather=true" +
+    "&past_days=1" +
     "&windspeed_unit=kn" +
     "&temperature_unit=fahrenheit" +
     "&timezone=auto";
@@ -546,6 +644,16 @@ function refreshFromSettings() {
 settingsToggle.addEventListener("click", () => {
   const isOpen = settingsPanel.classList.toggle("open");
   settingsPanel.setAttribute("aria-hidden", String(!isOpen));
+});
+
+document.addEventListener("click", (event) => {
+  if (!settingsPanel.classList.contains("open")) return;
+  const target = event.target;
+  if (settingsPanel.contains(target) || settingsToggle.contains(target)) {
+    return;
+  }
+  settingsPanel.classList.remove("open");
+  settingsPanel.setAttribute("aria-hidden", "true");
 });
 
 [windUnitSelect, tempUnitSelect, waveUnitSelect].forEach((select) => {

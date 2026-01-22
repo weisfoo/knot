@@ -39,6 +39,14 @@ body {
   margin-bottom: 32px;
 }
 
+.controls-row {
+  display: flex;
+  gap: 16px;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
 .tag {
   display: inline-flex;
   padding: 6px 14px;
@@ -93,11 +101,12 @@ select {
 }
 
 .settings-toggle {
-  padding: 10px 14px;
+  padding: 6px 10px;
   border-radius: 999px;
   border: 2px solid var(--ink);
   background: #fff;
   font-weight: 600;
+  font-size: 0.85rem;
   cursor: pointer;
 }
 
@@ -352,6 +361,19 @@ select {
   .hero {
     flex-direction: column;
     align-items: flex-start;
+  }
+
+  .controls-row {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .controls {
+    flex: 1;
+  }
+
+  .settings {
+    min-width: auto;
   }
 
   .status {
