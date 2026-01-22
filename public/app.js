@@ -219,6 +219,44 @@ function selectHourlyWindow(hourly, anchorTime, windowSize = 24) {
   return { start, end };
 }
 
+function getNowIndex(hourly, window) {
+  if (!hourly?.time) return null;
+  const now = Date.now();
+  const slice = hourly.time.slice(window.start, window.end);
+  const idx = slice.findIndex((time) => new Date(time).getTime() >= now);
+  if (idx === -1) return null;
+  return idx;
+}
+
+const nowMarkerPlugin = {
+  id: "nowMarker",
+  afterDatasetsDraw(chart, _args, pluginOptions) {
+    const index = pluginOptions?.index;
+    if (index === null || index === undefined) return;
+    const xScale = chart.scales.x;
+    const yScale = chart.scales.y;
+    if (!xScale || !yScale) return;
+    const x = xScale.getPixelForValue(index);
+    const ctx = chart.ctx;
+    ctx.save();
+    ctx.strokeStyle = "rgba(29, 28, 26, 0.35)";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(x, yScale.top);
+    ctx.lineTo(x, yScale.bottom);
+    ctx.stroke();
+    ctx.fillStyle = "#1d1c1a";
+    ctx.beginPath();
+    ctx.arc(x, yScale.top + 6, 3, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+};
+
+if (typeof Chart !== "undefined") {
+  Chart.register(nowMarkerPlugin);
+}
+
 function renderForecastChart(hourly) {
   if (!forecastChartEl) return;
   if (!hourly?.time) {
@@ -234,6 +272,7 @@ function renderForecastChart(hourly) {
   const wind = hourly.windspeed_10m?.slice(window.start, window.end) ?? [];
   const gust = hourly.windgusts_10m?.slice(window.start, window.end) ?? [];
   const temp = hourly.temperature_2m?.slice(window.start, window.end) ?? [];
+  const nowIndex = getNowIndex(hourly, window);
 
   const windData = wind.map((value) =>
     value == null ? null : settings.windUnit === "mph" ? knotsToMph(value) : value
@@ -287,6 +326,9 @@ function renderForecastChart(hourly) {
       responsive: true,
       maintainAspectRatio: false,
       plugins: {
+        nowMarker: {
+          index: nowIndex
+        },
         legend: {
           position: "bottom",
           labels: {
@@ -347,6 +389,7 @@ function renderDirectionChart(hourly) {
   const window = selectHourlyWindow(hourly, lastConditions?.current?.time, 24);
   const labels = hourly.time.slice(window.start, window.end).map((time) => formatTimeLabel(time));
   const direction = hourly.winddirection_10m?.slice(window.start, window.end) ?? [];
+  const nowIndex = getNowIndex(hourly, window);
 
   const config = {
     type: "line",
@@ -368,6 +411,9 @@ function renderDirectionChart(hourly) {
       responsive: true,
       maintainAspectRatio: false,
       plugins: {
+        nowMarker: {
+          index: nowIndex
+        },
         legend: {
           position: "bottom",
           labels: {

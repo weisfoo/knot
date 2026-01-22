@@ -246,6 +246,10 @@ select {
   box-shadow: 0 12px 25px var(--shadow);
 }
 
+.hourly + .hourly {
+  margin-top: 20px;
+}
+
 .hourly h3 {
   margin: 0 0 16px;
 }
