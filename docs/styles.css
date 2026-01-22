@@ -260,6 +260,10 @@ select {
   margin-top: 20px;
 }
 
+.hourly + .grid {
+  margin-top: 24px;
+}
+
 .hourly h3 {
   margin: 0 0 16px;
 }
